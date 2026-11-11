@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>한국어 OCR 첫 테스트</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<style>
+:root{--paper:#fffdf6;--ink:#292820;--muted:#777267;--line:#e7e0d1;--yellow:#fff176}
+*{box-sizing:border-box} body{margin:0;background:#f4f0e6;color:var(--ink);font-family:system-ui,"Malgun Gothic",sans-serif}
+header{background:var(--paper);border-bottom:1px solid var(--line);padding:20px;}
+header,main{max-width:1000px;margin-left:auto;margin-right:auto}
+h1{font-size:clamp(22px,4vw,30px);margin:4px 0 8px} p{color:var(--muted);line-height:1.6}
+main{padding:22px 16px 50px} .tag{font-size:12px;font-weight:800;letter-spacing:1.5px;color:#8a805f}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:18px;min-width:0}
+h2{font-size:17px;margin:0 0 12px}.imageStage{position:relative;display:flex;justify-content:center;align-items:center;width:fit-content;max-width:100%;min-height:120px;margin:0 auto;background:#eee9dc;border-radius:10px;overflow:hidden;touch-action:none}.selectionBox{position:absolute;border:2px solid #e0b900;background:rgba(255,241,118,.18);pointer-events:none;display:none}.cropHelp{font-size:12px;color:#777267;line-height:1.55;margin:8px 0} .photo{max-width:100%;max-height:620px;width:auto;height:auto;object-fit:contain;background:#eee9dc;border-radius:10px;display:block}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+button,.filelabel{border:0;border-radius:10px;padding:11px 14px;font-weight:800;background:#f1e7a1;color:#39351f;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait} .secondary{background:#eee9dd;color:#514c40}
+input[type=file]{display:none} textarea{width:100%;min-height:280px;padding:13px;border:1px solid var(--line);border-radius:10px;background:white;font:14px/1.8 system-ui;color:var(--ink);resize:vertical}
+.status{padding:12px;border-radius:10px;background:#f1eee5;font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.meter{height:9px;background:#e7e0d1;border-radius:99px;overflow:hidden;margin-top:8px} .bar{height:100%;width:0;background:#d9bd35;transition:width .2s}
+.small{font-size:12px;color:var(--muted)} .hidden{display:none}
+.editActions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+.editActions button{background:#e8c5d5;color:#563b49}
+.editActions button:disabled{opacity:.45;cursor:not-allowed}
+.advanced{width:100%;margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fbf8ef}
+.advanced summary{font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
+.advanced>div{margin-top:10px!important}#curvePanel{display:none!important}
+#imageStage{position:relative}
+.imageStage.empty{width:100%;min-height:300px;background:linear-gradient(135deg,#fff8ec,#f8e9e3);border:2px dashed #e8cdbd;border-radius:18px}
+.imageStage.empty .photo,#imageStage.empty #highlightLayer{display:none}
+.emptyPrompt{display:none;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:28px 16px;text-align:center;color:#8b7468;pointer-events:none}
+.imageStage.empty .emptyPrompt{display:flex}
+.emptyPrompt strong{font-size:16px;color:#6d5148}
+.emptyPrompt span:last-child{font-size:12px;color:#9b8980}
+.emptyIcon{display:grid;place-items:center;width:52px;height:52px;border-radius:17px;background:#fffdf6;color:#d58d83;font-size:30px;box-shadow:0 5px 14px #9b6d5520}
+#highlightLayer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.highlightPanel{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:8px 0}
+.legend span{display:flex;align-items:center;gap:6px}
+.dot{display:inline-block;width:12px;height:12px;border-radius:3px}
+.dot.ai{background:rgba(255,224,75,.75);border:1px solid #d2a900}
+.dot.manual{background:rgba(255,92,112,.55);border:1px solid #d43d55}
+.aiBtn{background:#fff0a8;color:#5a4810}
+.downloadBtn{background:#f5dce5;color:#633d4c}
+.lineChoices{display:grid;gap:8px;margin-top:12px}
+.lineChoice{width:100%;text-align:left;background:#fff;border:1px solid var(--line);padding:10px 12px;border-radius:10px;font-weight:500;line-height:1.6;color:var(--ink)}
+.lineChoice.selected-ai{background:#fff9d8;border:2px solid #e2bd27}
+.lineChoice.selected-manual{background:#fff0f1;border:2px solid #e65b6d}
+.lineChoice .lineMeta{display:block;font-size:11px;color:var(--muted);margin-top:4px}
+.resultModal{display:none;position:fixed;inset:0;z-index:9999;background:rgba(25,20,25,.72);padding:18px;align-items:center;justify-content:center}
+.resultModal.open{display:flex}
+.resultDialog{width:min(900px,100%);max-height:92vh;overflow:auto;background:#fffdf9;border-radius:18px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.28)}
+.resultHeader,.resultFooter{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.resultHeader h2{margin:0 0 4px}
+.closeResult{white-space:nowrap}
+.resultImageWrap{margin:16px 0;background:#f0eee8;border-radius:12px;padding:10px;display:flex;justify-content:center;max-height:65vh;overflow:auto}
+.resultImageWrap img{display:block;max-width:100%;height:auto;object-fit:contain}
+.resultFooter{flex-wrap:wrap}
+@media(max-width:600px){.resultModal{padding:8px}.resultDialog{padding:12px;max-height:96vh}.resultHeader{align-items:flex-start}.resultImageWrap{max-height:70vh}}
+
+@media(max-width:760px){.lineChoice{font-size:13px}}
+@media(max-width:760px){.grid{grid-template-columns:1fr} header{padding:18px 16px}}
+
+/* v10: warm, playful highlighter-lab visual refresh */
+:root{
+ --paper:#fffefa;--ink:#403b37;--muted:#8a817b;--line:#f0e6df;
+ --yellow:#fff176;--pink:#ffd9df;--peach:#fff1e8;--lav:#f3eafa;
+}
+body{
+ background:
+  radial-gradient(circle at 8% 8%,rgba(255,221,151,.28),transparent 25rem),
+  radial-gradient(circle at 94% 18%,rgba(255,205,220,.34),transparent 28rem),
+  #fff8f3;
+ color:var(--ink);
+}
+header{
+ max-width:1000px;display:flex;align-items:center;gap:20px;
+ padding:30px 24px 25px;background:rgba(255,254,250,.88);
+ border:1px solid #f4e8df;border-bottom:1px solid #f1e4db;
+ border-radius:0 0 26px 26px;box-shadow:0 8px 28px rgba(135,95,72,.06);
+}
+.welcomeMark{position:relative;flex:0 0 82px;height:82px;border-radius:25px;background:linear-gradient(145deg,#fff3b8,#ffe2d8);display:grid;place-items:center;transform:rotate(-3deg)}
+.markerPen{position:relative;display:block;width:24px;height:58px;border-radius:7px 7px 5px 5px;background:linear-gradient(90deg,#f5c92e 0%,#fff17a 42%,#e7b91f 100%);box-shadow:inset 2px 0 rgba(255,255,255,.55),2px 5px 8px rgba(118,87,27,.16);transform:rotate(38deg)}
+.markerPen:before{content:"";position:absolute;top:-8px;left:0;width:24px;height:13px;border-radius:6px 6px 2px 2px;background:linear-gradient(90deg,#f7d94e,#fff4a3,#e7bd32)}
+.markerPen:after{content:"";position:absolute;bottom:-10px;left:3px;width:18px;height:12px;background:#d7a92b;clip-path:polygon(0 0,100% 0,50% 100%)}
+.markerPen i{position:absolute;top:15px;left:0;width:100%;height:4px;background:rgba(255,255,255,.55)}
+.tinySpark{position:absolute;right:10px;top:7px;color:#ed9a9e;font-size:21px}
+.welcomeCopy{min-width:0}
+.welcomeEyebrow{margin:0 0 5px!important;color:#d18c7e!important;font-size:12px;font-weight:800;letter-spacing:.08em}
+header h1{font-size:clamp(23px,4vw,32px);letter-spacing:-.04em;color:#4d413d;margin:0 0 7px}
+header .welcomeCopy>p:last-child{margin:0;color:#877b74;font-size:14px}
+main{padding-top:24px}
+.card{background:rgba(255,254,250,.94);border:1px solid #f1e6df;border-radius:22px;padding:20px;box-shadow:0 9px 26px rgba(120,91,73,.055)}
+h2{display:flex;align-items:center;gap:9px;color:#554944;font-size:17px;letter-spacing:-.02em}
+.stepBubble{display:inline-grid;place-items:center;width:27px;height:27px;border-radius:10px;background:#ffe8d9;color:#b97862;font-size:13px}
+button,.filelabel{border-radius:14px;padding:11px 16px;box-shadow:0 3px 0 rgba(87,65,50,.07);transition:transform .16s ease,box-shadow .16s ease,filter .16s ease}
+button:hover,.filelabel:hover{transform:translateY(-1px);filter:saturate(1.05);box-shadow:0 5px 10px rgba(87,65,50,.09)}
+button:active,.filelabel:active{transform:translateY(1px);box-shadow:none}
+.secondary{background:#f3eee9;color:#6b5d55}
+.editActions button{background:#f6dce7;color:#875369}
+.aiBtn{background:linear-gradient(135deg,#fff3a5,#ffe46c);color:#65520c}
+.downloadBtn{background:linear-gradient(135deg,#ffe3e9,#f7c7d5);color:#804d5e}
+#run{background:linear-gradient(135deg,#ffec9a,#ffd86b);color:#594711}
+textarea{border:1.5px solid #eee2db;border-radius:15px;background:#fffefd;outline:none}
+textarea:focus,input:focus,select:focus{outline:3px solid rgba(242,190,156,.25);border-color:#e7b79f}
+.imageStage{border-radius:16px;background:#f4eee8}
+.photo{border-radius:16px}
+.cropHelp{color:#9a8980}
+.status{background:#f8f1eb;border:1px solid #f0e5dc;border-radius:14px}
+.meter{background:#f0e8df}.bar{background:linear-gradient(90deg,#f5d95b,#f4a6a8)}
+.advanced{background:#fffaf5;border-color:#f1e5dc;border-radius:14px}
+.highlightPanel{border-top:1px dashed #eadbd2;padding-top:19px}
+.legend{gap:18px;color:#82736b}
+.legend span{gap:8px}
+.markerStroke{position:relative;display:inline-block;width:25px;height:11px;border-radius:8px 5px 7px 4px;transform:rotate(-8deg);opacity:.9}
+.markerStroke:after{content:"";position:absolute;left:3px;right:2px;top:2px;height:2px;background:rgba(255,255,255,.55);border-radius:5px}
+.aiStroke{background:linear-gradient(90deg,#ffe24c,#fff28a);box-shadow:0 1px 2px rgba(181,145,20,.2)}
+.manualStroke{background:linear-gradient(90deg,#ff8290,#ffb0b7);box-shadow:0 1px 2px rgba(191,64,81,.2)}
+.lineChoices{gap:9px}
+.lineChoice{position:relative;overflow:hidden;border:1px solid #f0e6df;border-radius:14px;background:#fffefa;padding:12px 14px 12px 18px;box-shadow:0 2px 8px rgba(100,75,60,.035)}
+.lineChoice:before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:4px;border-radius:0 5px 5px 0;background:#eee3dc}
+.lineChoice.selected-ai{background:linear-gradient(90deg,rgba(255,239,132,.42),rgba(255,254,250,.92) 80%);border:1px solid #f0d96a}
+.lineChoice.selected-ai:before{background:#f4d849}
+.lineChoice.selected-manual{background:linear-gradient(90deg,rgba(255,190,197,.4),rgba(255,254,250,.94) 80%);border:1px solid #f0aab3}
+.lineChoice.selected-manual:before{background:#ef8794}
+.lineChoice .lineMeta{color:#9a8a81}
+.resultDialog{border:1px solid #f2e4dc;border-radius:24px;background:#fffdf9;box-shadow:0 22px 70px rgba(45,31,27,.3)}
+.resultImageWrap{background:#f8f1eb;border-radius:16px}
+.closeResult{background:#f4eee9;color:#6d5b54}
+@media(max-width:600px){
+ header{padding:22px 16px 20px;gap:13px;border-radius:0 0 22px 22px}
+ .welcomeMark{flex-basis:64px;height:64px;border-radius:20px}
+ .markerPen{transform:scale(.82) rotate(38deg)}
+ header h1{font-size:22px;line-height:1.35}
+ header .welcomeCopy>p:last-child{font-size:12px}
+ main{padding:16px 12px 36px}
+ .card{padding:16px;border-radius:19px}
+}
+
+</style></head>
+<body>
+<header>
+ <div class="welcomeMark" aria-hidden="true"><span class="markerPen"><i></i></span><span class="tinySpark">✦</span></div>
+ <div class="welcomeCopy">
+  <p class="welcomeEyebrow">책 속에서 반짝이는 한 문장</p>
+  <h1>형광펜 연구소에 오신 걸 환영합니다.</h1>
+  <p>형광펜으로 책의 핵심을 콕! 집어주는 쪽집개 연구소입니다.</p>
+ </div>
+</header>
+<main>
+<div class="grid">
+<section class="card">
+<h2><span class="stepBubble">1</span> 책 사진 가져오기</h2>
+<div id="imageStage" class="imageStage empty"><div class="emptyPrompt"><span class="emptyIcon">＋</span><strong>책 사진을 올려 주세요</strong><span>사진을 선택하면 이곳에 미리 보기가 나타나요.</span></div><img id="preview" class="photo" alt="선택한 책 페이지 사진" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="><canvas id="highlightLayer" aria-hidden="true"></canvas><div id="selectionBox" class="selectionBox"></div></div></div>
+<div class="actions">
+<label class="filelabel" for="file">다른 사진 선택</label><input id="file" type="file" accept="image/*">
+<button id="sample" class="secondary">사진 지우기</button>
+</div>
+<p class="cropHelp">✂️ 사진 위에서 마우스나 손가락으로 드래그해 본문 영역을 선택해 줘. 선택하지 않으면 사진 전체를 인식해.</p><div class="actions"><button id="clearCrop" class="secondary">본문 영역 선택 해제</button></div><p class="small">선택한 영역만 잘라서 OCR해. 다른 사진으로 바꿔도 다시 선택할 수 있어.</p>
+</section>
+<section class="card">
+<h2>② 한국어 인식 결과</h2>
+<div id="status" class="status">준비 완료. 아래 버튼을 눌러 한국어 인식을 시작해 줘.</div>
+<div class="meter"><div id="bar" class="bar"></div></div>
+<div class="actions"><button id="run">🔎 한국어 인식 시작</button><button id="clear" class="secondary">결과 지우기</button>
+<details class="advanced"><summary>실험 설정 (필요할 때만 열기)</summary><div style="width:100%;margin-top:8px;padding:12px;background:#f8f4e8;border-radius:12px">
+ <label for="photoType" style="font-size:13px;font-weight:800;display:block;margin-bottom:6px">📷 사진 형태</label>
+ <select id="photoType" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;background:white">
+  <option value="flat">평평한 페이지</option>
+  <option value="curved">가운데가 휘어진 페이지</option>
+ </select>
+ <p class="small" style="margin:7px 0 0">사진 형태는 실험 설정을 안내하기 위한 선택이야. 휘어진 사진도 우선 곡면 보정 0으로 인식해 보고, 필요할 때만 보정을 올려 보자.</p>
+</div>
+<label class="small" style="display:flex;align-items:center;gap:7px;width:100%;margin-top:10px"><input id="enhance" type="checkbox" checked> 흑백·명암 보정 적용</label>
+<div style="width:100%;margin-top:10px">
+ <label for="scaleChoice" style="font-size:13px;font-weight:800;display:block">🔎 글자 확대 정도</label>
+ <select id="scaleChoice" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;background:white;margin-top:5px">
+  <option value="1">원본 크기 (1배)</option>
+  <option value="1.5">1.5배</option>
+  <option value="2" selected>2배</option>
+  <option value="2.5">2.5배</option>
+ </select>
+ <label for="contrast" style="font-size:13px;font-weight:800;display:flex;justify-content:space-between;margin-top:12px"><span>명암 대비</span><span id="contrastValue">1.28</span></label>
+ <input id="contrast" type="range" min="1" max="1.8" value="1.28" step="0.04" style="width:100%">
+ <label class="small" style="display:flex;align-items:center;gap:7px;margin-top:10px"><input id="threshold" type="checkbox"> 흑백 이진화 추가 (실험 기능)</label>
+ <label for="thresholdValue" class="small" style="display:flex;justify-content:space-between;margin-top:8px"><span>이진화 기준값</span><span id="thresholdNumber">165</span></label>
+ <input id="thresholdValue" type="range" min="100" max="220" value="165" step="5" style="width:100%">
+</div>
+<div id="curvePanel" style="width:100%;margin-top:12px;padding:12px;border:1px solid #e7e0d1;border-radius:12px">
+ <label for="curve" style="font-size:13px;font-weight:800;display:flex;justify-content:space-between"><span>📖 곡면 보정 (실험 기능)</span><span id="curveValue">0</span></label>
+ <input id="curve" type="range" min="0" max="30" value="0" step="1" style="width:100%">
+ <div class="small">글줄이 실제로 휘어 보일 때만 조금씩 조절해. 이 기능은 자동 펴기가 아니라 수동으로 이미지 조각을 이동시키는 실험 기능이야.</div>
+ <label for="curveDirection" class="small" style="display:block;margin-top:8px">휘어진 방향</label>
+ <select id="curveDirection" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;background:white"><option value="up">가운데가 아래로 처져 보여요</option><option value="down">가운데가 위로 솟아 보여요</option></select>
+</div></details></div>
+<textarea id="result" placeholder="인식된 한국어 문장이 여기에 나타날 거야."></textarea>
+<div class="editActions">
+ <button id="confirmEdit" type="button" disabled>수정 완료</button>
+ <span id="editState" class="small" aria-live="polite">인식 결과가 나오면 틀린 글자를 직접 고칠 수 있어.</span>
+</div>
+<p class="small">인식 결과를 확인하고 틀린 글자나 띄어쓰기를 고친 뒤 ‘수정 완료’를 눌러 줘.</p>
+<p class="small">처음 실행 시 한국어 데이터(약 수 MB)를 한 번 다운로드해. 이후에는 브라우저 캐시를 사용할 수 있어.</p>
+<section id="highlightPanel" class="highlightPanel">
+ <h2><span class="stepBubble">2</span> 마음에 드는 문장에 쓱!</h2>
+ <p class="small">OCR이 끝나면 문장 후보가 나타나. 노란색은 문장 분석 규칙 추천, 붉은색은 직접 선택이야.</p>
+ <div class="legend"><span><i class="markerStroke aiStroke"></i> AI 규칙 추천 · 노랑</span><span><i class="markerStroke manualStroke"></i> 직접 선택 · 빨강</span></div>
+ <div class="actions">
+  <button id="recommendBtn" type="button" class="aiBtn" disabled>✨ 핵심 문장 추천</button>
+  <button id="clearHighlights" type="button" class="secondary" disabled>표시 지우기</button>
+  <button id="downloadMarked" type="button" class="downloadBtn" disabled>형광펜 결과 미리보기</button>
+ </div>
+ <div id="lineChoices" class="lineChoices"><p class="small">먼저 책 사진의 글자를 인식해 줘.</p></div>
+ <p id="highlightStatus" class="small" aria-live="polite">노란색 추천은 실제 생성형 AI가 아니라 문장 분석 규칙으로 작동하는 시제품이야. 현재 형광펜은 문장 전체가 아니라 OCR이 나눈 줄 단위로 표시돼.</p>
+</section>
+</section>
+</div>
+</main>
+
+<div id="resultModal" class="resultModal" aria-hidden="true">
+ <div class="resultDialog" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+  <div class="resultHeader">
+   <div><h2 id="resultTitle">형광펜 독서 기록</h2><p class="small">사진을 확인한 뒤 저장할 수 있어.</p></div>
+   <button id="closeResult" type="button" class="secondary closeResult" aria-label="미리보기 닫기">닫기 ✕</button>
+  </div>
+  <div class="resultImageWrap"><img id="resultImage" alt="형광펜 표시가 적용된 책 사진"></div>
+  <div class="resultFooter">
+   <span class="small">노란색: 규칙 추천 · 붉은색: 직접 선택</span>
+   <button id="saveResult" type="button" class="downloadBtn">사진 다운로드</button>
+  </div>
+ </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const original=$("preview").src;
+let chosenFile=null, worker=null, busy=false, cropRect=null, dragStart=null, confirmedText=null, ocrLines=[], activeHighlights=new Map(), imageMap=null;
+$("file").addEventListener("change",e=>{
+ const f=e.target.files&&e.target.files[0]; if(!f)return;
+ chosenFile=f; $("imageStage").classList.remove("empty"); cropRect=null; ocrLines=[]; activeHighlights.clear(); renderLineChoices(); drawHighlights(); drawCropBox(); $("preview").src=URL.createObjectURL(f); $("result").value=""; resetEditConfirmation();
+ $("status").textContent="새 사진을 선택했어. 한국어 인식을 시작해 줘.";
+});
+$("sample").onclick=()=>{chosenFile=null;$("imageStage").classList.add("empty");cropRect=null;ocrLines=[];activeHighlights.clear();renderLineChoices();drawHighlights();drawCropBox();$("preview").src=original;$("file").value="";$("result").value="";resetEditConfirmation();$("status").textContent="처음 사진으로 돌아왔어."};
+function drawCropBox(){
+ const box=$("selectionBox");
+ if(!cropRect){box.style.display="none";return;}
+ box.style.display="block";
+ box.style.left=(cropRect.x*100)+"%";
+ box.style.top=(cropRect.y*100)+"%";
+ box.style.width=(cropRect.w*100)+"%";
+ box.style.height=(cropRect.h*100)+"%";
+}
+function pointOnImage(e){
+ const r=$("preview").getBoundingClientRect();
+ return {x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))};
+}
+$("imageStage").addEventListener("pointerdown",e=>{
+ if(!$("preview").naturalWidth)return;
+ e.preventDefault();$("imageStage").setPointerCapture(e.pointerId);
+ dragStart=pointOnImage(e);cropRect={x:dragStart.x,y:dragStart.y,w:0,h:0};drawCropBox();
+});
+$("imageStage").addEventListener("pointermove",e=>{
+ if(!dragStart)return;
+ const p=pointOnImage(e),x=Math.min(dragStart.x,p.x),y=Math.min(dragStart.y,p.y);
+ cropRect={x,y,w:Math.abs(p.x-dragStart.x),h:Math.abs(p.y-dragStart.y)};drawCropBox();
+});
+function finishCrop(){
+ if(!dragStart)return;dragStart=null;
+ if(!cropRect||cropRect.w<.025||cropRect.h<.025){cropRect=null;drawCropBox();$("status").textContent="선택 영역이 너무 작아서 취소했어. 다시 크게 드래그해 줘.";return;}
+ $("status").textContent="본문 영역을 선택했어. 이 영역만 OCR할 거야.";
+}
+$("imageStage").addEventListener("pointerup",finishCrop);
+$("imageStage").addEventListener("pointercancel",finishCrop);
+$("clearCrop").onclick=()=>{cropRect=null;dragStart=null;drawCropBox();$("status").textContent="본문 영역 선택을 해제했어. 사진 전체를 인식할게.";};
+$("preview").addEventListener("load",()=>{cropRect=null;drawCropBox();});
+
+$("clear").onclick=()=>{$("result").value="";resetEditConfirmation();$("bar").style.width="0%";$("status").textContent="결과를 지웠어."};
+function resetEditConfirmation(message){
+ confirmedText=null;
+ $("confirmEdit").disabled=!$("result").value.trim();
+ $("confirmEdit").textContent="수정 완료";
+ $("editState").textContent=message||"인식 결과가 나오면 틀린 글자를 직접 고칠 수 있어.";
+}
+$("result").addEventListener("input",()=>resetEditConfirmation("내용이 바뀌었어. 수정이 끝나면 ‘수정 완료’를 눌러 줘."));
+$("confirmEdit").addEventListener("click",()=>{
+ const text=$("result").value.trim();
+ if(!text)return;
+ confirmedText=text;
+ $("confirmEdit").textContent="수정 완료 ✓";
+ $("editState").textContent="수정한 글자를 확정했어. 다음 단계에서 이 내용을 사용할 수 있어.";
+});
+
+function setStatus(t,p){$("status").textContent=t;if(p!==undefined)$("bar").style.width=Math.max(0,Math.min(100,p))+"%"}
+$("curve").addEventListener("input",()=>{$("curveValue").textContent=$("curve").value;});
+$("contrast").addEventListener("input",()=>{$("contrastValue").textContent=Number($("contrast").value).toFixed(2);});
+$("thresholdValue").addEventListener("input",()=>{$("thresholdNumber").textContent=$("thresholdValue").value;});
+$("photoType").addEventListener("change",()=>{
+ $("curvePanel").style.opacity=$("photoType").value==="curved"?"1":"0.72";
+ if($("photoType").value==="flat"){$("curve").value="0";$("curveValue").textContent="0";}
+});
+function applyGentleCurveCorrection(canvas){
+ const amount=Number($("curve").value);
+ if(!amount) return canvas;
+ const w=canvas.width,h=canvas.height;
+ const out=document.createElement("canvas"); out.width=w; out.height=h;
+ const octx=out.getContext("2d");
+ octx.fillStyle="#fff";octx.fillRect(0,0,w,h);
+ const ctx=canvas.getContext("2d");
+ const strips=180, stripW=w/strips;
+ const sign=$("curveDirection").value==="up"?1:-1;
+ for(let i=0;i<strips;i++){
+   const x=i*stripW, mid=(x+stripW/2)/w;
+   const offset=sign*amount*Math.sin(Math.PI*mid);
+   octx.drawImage(canvas,x,0,Math.ceil(stripW)+1,h,x,offset,Math.ceil(stripW)+1,h);
+ }
+ return out;
+}
+async function makeOcrImage(){
+ const img=$("preview");
+ if(!img.complete || !img.naturalWidth) await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error("사진을 불러오지 못했어."));});
+ let sx=0,sy=0,sw=img.naturalWidth,sh=img.naturalHeight;
+ if(cropRect){
+   sx=Math.round(cropRect.x*img.naturalWidth); sy=Math.round(cropRect.y*img.naturalHeight);
+   sw=Math.max(1,Math.round(cropRect.w*img.naturalWidth)); sh=Math.max(1,Math.round(cropRect.h*img.naturalHeight));
+ }
+ const requestedScale=Number($("scaleChoice").value);
+ const scale=Math.min(requestedScale,3000/sw);
+ const canvas=document.createElement("canvas");
+ canvas.width=Math.round(sw*scale); canvas.height=Math.round(sh*scale);
+ const ctx=canvas.getContext("2d",{willReadFrequently:true});
+ ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high";
+ ctx.drawImage(img,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
+ if($("enhance").checked || $("threshold").checked){
+   const frame=ctx.getImageData(0,0,canvas.width,canvas.height), d=frame.data;
+   const contrast=Number($("contrast").value), brightness=4;
+   const useThreshold=$("threshold").checked, threshold=Number($("thresholdValue").value);
+   for(let i=0;i<d.length;i+=4){
+     const gray=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+     let v=$("enhance").checked?Math.max(0,Math.min(255,(gray-128)*contrast+128+brightness)):gray;
+     if(useThreshold)v=v>=threshold?255:0;
+     d[i]=d[i+1]=d[i+2]=v;
+   }
+   ctx.putImageData(frame,0,0);
+ }
+ return {canvas,sx,sy,sw,sh,scale};
+}
+
+function scoreLine(text){
+ const t=text.replace(/\s+/g," ").trim();
+ let score=0;
+ const cues=["의미","중요","왜냐하면","따라서","그러나","하지만","결국","즉","필요","이유","생각","깨달","문제","해결","배경","주장","기억","선택","변화","때문","말한다","뜻한다","드러난다"];
+ for(const cue of cues) if(t.includes(cue)) score+=2;
+ if(/[?？]$/.test(t))score+=1;
+ if(/[.!。？！]$/.test(t))score+=1;
+ if(t.length>=22&&t.length<=100)score+=2;
+ if(t.length<12)score-=2;
+ if(/^[0-9０-９ㄱ-ㅎㅏ-ㅣ\s.,:;()（）-]+$/.test(t))score-=5;
+ return score;
+}
+function renderLineChoices(){
+ const host=$("lineChoices");
+ host.innerHTML="";
+ if(!ocrLines.length){host.innerHTML='<p class="small">인식된 문장 위치가 없어. 사진을 다시 인식해 줘.</p>';return;}
+ ocrLines.forEach(line=>{
+   const b=document.createElement("button");
+   b.type="button";b.className="lineChoice";
+   const selected=activeHighlights.get(line.id);
+   if(selected==="ai")b.classList.add("selected-ai");
+   if(selected==="manual")b.classList.add("selected-manual");
+   b.textContent=line.text;
+   const meta=document.createElement("span");meta.className="lineMeta";
+   meta.textContent=selected==="ai"?"✨ AI 규칙 추천 표시 중":selected==="manual"?"🖍 직접 선택 표시 중":"눌러서 붉은 형광펜으로 직접 선택";
+   b.appendChild(meta);
+   b.addEventListener("click",()=>{
+     if(activeHighlights.get(line.id)==="manual")activeHighlights.delete(line.id);
+     else activeHighlights.set(line.id,"manual");
+     renderLineChoices();drawHighlights();updateHighlightButtons();
+   });
+   host.appendChild(b);
+ });
+ updateHighlightButtons();
+}
+function drawHighlights(){
+ const canvas=$("highlightLayer"),img=$("preview");
+ if(!img.naturalWidth||!img.clientWidth)return;
+ const w=img.clientWidth,h=img.clientHeight;
+ const dpr=window.devicePixelRatio||1;
+ canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+ canvas.style.width=w+"px";canvas.style.height=h+"px";
+ const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+ for(const line of ocrLines){
+   const type=activeHighlights.get(line.id);if(!type)continue;
+   const x=line.x0/img.naturalWidth*w,y=line.y0/img.naturalHeight*h;
+   const rw=(line.x1-line.x0)/img.naturalWidth*w,rh=(line.y1-line.y0)/img.naturalHeight*h;
+   ctx.fillStyle=type==="ai"?"rgba(255,224,65,.48)":"rgba(255,70,95,.38)";
+   ctx.strokeStyle=type==="ai"?"rgba(194,151,0,.9)":"rgba(210,38,65,.9)";
+   ctx.lineWidth=1.5;
+   const pad=Math.max(2,rh*.12);
+   ctx.beginPath();ctx.roundRect(x-2,y-pad,Math.max(4,rw+4),rh+pad*2,4);ctx.fill();ctx.stroke();
+ }
+}
+function updateHighlightButtons(){
+ const any=activeHighlights.size>0;
+ $("clearHighlights").disabled=!any;
+ $("downloadMarked").disabled=!any;
+ $("recommendBtn").disabled=!ocrLines.length;
+}
+$("recommendBtn").addEventListener("click",()=>{
+ if(!ocrLines.length)return;
+ activeHighlights.clear();
+ const ranked=ocrLines.map(line=>({line,score:scoreLine(line.text)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,3);
+ if(!ranked.length){
+   $("highlightStatus").textContent="추천할 만한 문장을 찾지 못했어. 아래 문장 중 원하는 것을 직접 눌러 줘.";
+ }else{
+   ranked.forEach(x=>activeHighlights.set(x.line.id,"ai"));
+   $("highlightStatus").textContent=ranked.length+"개 문장을 문장 분석 규칙으로 추천했어. 실제 AI 분석은 아니며, 마음에 들지 않는 추천은 직접 바꾸거나 지울 수 있어.";
+ }
+ renderLineChoices();drawHighlights();
+});
+$("clearHighlights").addEventListener("click",()=>{
+ activeHighlights.clear();renderLineChoices();drawHighlights();
+ $("highlightStatus").textContent="형광펜 표시를 모두 지웠어.";
+});
+
+function buildMarkedCanvas(){
+ const img=$("preview");if(!img.naturalWidth)return null;
+ const out=document.createElement("canvas");out.width=img.naturalWidth;out.height=img.naturalHeight;
+ const ctx=out.getContext("2d");ctx.drawImage(img,0,0);
+ for(const line of ocrLines){
+   const type=activeHighlights.get(line.id);if(!type)continue;
+   const pad=Math.max(3,(line.y1-line.y0)*.12);
+   ctx.fillStyle=type==="ai"?"rgba(255,224,65,.48)":"rgba(255,70,95,.38)";
+   ctx.strokeStyle=type==="ai"?"rgba(194,151,0,.9)":"rgba(210,38,65,.9)";
+   ctx.lineWidth=Math.max(2,img.naturalWidth/900);
+   ctx.beginPath();ctx.roundRect(line.x0-2,line.y0-pad,Math.max(4,line.x1-line.x0+4),line.y1-line.y0+pad*2,Math.max(3,pad));ctx.fill();ctx.stroke();
+ }
+ return out;
+}
+$("downloadMarked").addEventListener("click",()=>{
+ const out=buildMarkedCanvas();if(!out)return;
+ $("resultImage").src=out.toDataURL("image/png");
+ $("resultModal").classList.add("open");$("resultModal").setAttribute("aria-hidden","false");
+});
+$("closeResult").addEventListener("click",()=>{
+ $("resultModal").classList.remove("open");$("resultModal").setAttribute("aria-hidden","true");
+});
+$("resultModal").addEventListener("click",e=>{
+ if(e.target===$("resultModal"))$("closeResult").click();
+});
+$("saveResult").addEventListener("click",()=>{
+ const a=document.createElement("a");a.download="형광펜-독서-기록.png";a.href=$("resultImage").src;a.click();
+});
+document.addEventListener("keydown",e=>{
+ if(e.key==="Escape"&&$("resultModal").classList.contains("open"))$("closeResult").click();
+});
+window.addEventListener("resize",drawHighlights);
+$("preview").addEventListener("load",()=>{cropRect=null;drawCropBox();drawHighlights();});
+
+$("run").onclick=async()=>{
+ if(busy)return; busy=true; $("run").disabled=true; ocrLines=[];activeHighlights.clear();renderLineChoices();drawHighlights(); $("result").value=""; resetEditConfirmation();
+ const modelUrl="https://cdn.jsdelivr.net/npm/@tesseract.js-data/kor/4.0.0_best_int/kor.traineddata.gz";
+ try{
+   if(typeof Tesseract==="undefined")throw new Error("Tesseract.js 라이브러리를 불러오지 못했어. CDN 접속을 확인해 줘.");
+   setStatus("1/3 한국어 학습 데이터 서버에 연결하는 중…",0);
+   const response=await fetch(modelUrl,{method:"HEAD",cache:"no-store"});
+   if(!response.ok)throw new Error("한국어 데이터 서버 응답 오류: HTTP "+response.status);
+   setStatus("2/3 한국어 인식 엔진을 준비하는 중…",0);
+   if(!worker){
+     worker=await Tesseract.createWorker("kor",1,{
+       langPath:"https://cdn.jsdelivr.net/npm/@tesseract.js-data/kor/4.0.0_best_int",
+       gzip:true,
+       logger:m=>{
+         if(m.status==="loading tesseract core")setStatus("2/3 인식 엔진 코어를 불러오는 중…",Math.round((m.progress||0)*100));
+         else if(m.status==="loading language traineddata")setStatus("2/3 한국어 데이터를 다운로드하는 중… "+Math.round((m.progress||0)*100)+"%",Math.round((m.progress||0)*100));
+         else if(m.status==="initializing api")setStatus("2/3 한국어 모델을 적용하는 중…",100);
+         else if(m.status==="recognizing text")setStatus("3/3 사진 속 글자를 읽는 중… "+Math.round((m.progress||0)*100)+"%",Math.round((m.progress||0)*100));
+       }
+     });
+   }
+   setStatus("3/3 사진 속 글자를 읽는 중…",0);
+   setStatus("사진을 확대하고 선택한 이미지 전처리를 적용하는 중…",0);
+   const sourceInfo=await makeOcrImage(); const source=sourceInfo.canvas; imageMap=sourceInfo;
+   setStatus("3/3 보정된 사진에서 글자를 읽는 중…",0);
+   await worker.setParameters({tessedit_pageseg_mode:"6",preserve_interword_spaces:"1"});
+   const {data}=await worker.recognize(source);
+   $("result").value=(data.text||"").trim(); resetEditConfirmation("인식 결과를 확인하고 틀린 글자를 직접 고쳐 줘.");
+   ocrLines=(data.lines||[]).filter(line=>line.text&&line.text.trim()&&line.bbox).map((line,index)=>({
+     id:index,text:line.text.trim(),
+     x0:sourceInfo.sx+line.bbox.x0/sourceInfo.scale,
+     y0:sourceInfo.sy+line.bbox.y0/sourceInfo.scale,
+     x1:sourceInfo.sx+line.bbox.x1/sourceInfo.scale,
+     y1:sourceInfo.sy+line.bbox.y1/sourceInfo.scale,
+     confidence:line.confidence
+   }));
+   activeHighlights.clear(); renderLineChoices(); drawHighlights();
+   setStatus($("result").value?"인식 완료! 결과를 확인해 줘. 오탈자나 띄어쓰기는 사진 상태에 따라 달라질 수 있어.":"인식은 끝났지만 글자를 찾지 못했어. 더 선명한 사진으로 다시 시도해 줘.",100);
+ }catch(err){
+   setStatus("실행에 실패했어. 인터넷 연결을 확인하고 다시 시도해 줘.",0);
+   console.error(err);
+   console.error(err);
+ }finally{busy=false;$("run").disabled=false}
+};
+</script>
+</body></html>
